@@ -16,6 +16,8 @@ cd tendis_wasm_example/
 bazelisk build //example:optimus_test.wasm
 
 # wasm aot
+# wasmedge install
+# curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | bash -s -- -v 0.14.1
 wasmedgec bazel-bin/example/optimus_test.wasm bazel-bin/example/optimus_test.wasm.aot
 
 # test
