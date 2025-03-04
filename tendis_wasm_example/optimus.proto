@@ -1,0 +1,204 @@
+// Copyright 2024 Vipshop Inc. All Rights Reserved.
+// Author: Meng Ding (daemon.d@vipshop.com)
+//
+
+syntax = "proto3";
+
+//package common;
+
+option cc_enable_arenas    = true;
+option java_multiple_files = true;
+
+/************************************************************************/
+/* did 枚举 */
+/************************************************************************/
+enum OptimusDid {
+  OPTIMUS_DID_INVALID = 0;
+  // 1. 序列服务获取 redis 信息，进而查询在线序列特征
+  // 2. Merger 落在线序列特征 bytes
+  OPTIMUS_DID_ONLINE = 10131;
+  // 1. 序列服务获取 tendis 信息，进而查询离线序列特征
+  // 2. Merger 落离线序列特征 version
+  OPTIMUS_DID_OFFLINE = 10132;
+  // 1. Merger 融合 10131 和 10132 得到完整的 OptimusEntity，给到 fepie 使用
+  // 2. 离线拿到 10131 和 10132 两份样本后，也要进行融合给到 fepie 使用
+  OPTIMUS_DID_FEPIE = 10143;
+}
+
+/************************************************************************/
+/* 在售商品简要信息 */
+/************************************************************************/
+
+// RocksDB 存储结构：key 是 goods_id, value 是 SideInfo
+
+message SideInfo {
+  // 三级品类
+  uint32 cat3_id = 1;
+  // 二级品类
+  uint32 cat2_id = 2;
+  // 品牌 id
+  uint32 brand_id = 3;
+  // 实际到手价，单位为元
+  uint32 real_price = 4;
+  // 用户 spu_id
+  uint64 spu_id = 5;
+}
+
+/************************************************************************/
+/* 用户行为数据 */
+/************************************************************************/
+
+message UserBehavior {
+  // 行为类型
+  uint32 behavior_type = 1;
+  // goodsid spuid skuid，用 behavior_type 区分
+  uint64 id        = 2;
+  string string_id = 3;
+  // 行为时间戳，秒级
+  uint32 timestamp = 4;
+  // 场景类型
+  uint32 scene = 5;
+  // 场景 id，不能为 0，如组货 id，档期 id，c 位入口商品 id
+  uint64 scene_id = 6;
+  // 场景 id 字符串类型，不能 id 化的则填 string_id
+  string scene_string_id = 7;
+  // 做 hardsearch 索引及记录不可回溯的信息
+  SideInfo side_info = 8;
+}
+
+/************************************************************************/
+/* 用户行为数据推数环节相关 */
+/************************************************************************/
+
+// 用户行为数据包括两部分：在线数据 + 离线数据
+// 在线数据和离线数据根据 dt 进行消融
+// 详细设计：https://docs.corp.vipshop.com/docs/30OreQEdO9YyHWy5
+
+// 【在线数据】
+// 1. 离线会将用户的实时行为数据推送到 redis
+// 2. unified did = 10131
+// 3. 数据格式为 hash，key 为 mid，subkey 为 dt, eg.
+// {
+//   "mid": {
+//     "20240322": "LZ4Compress(UserBehaviors serialized bytes)",
+//     "20240321": "LZ4Compress(UserBehaviors serialized bytes)"
+//   }
+// }
+
+message UserBehaviors {
+  repeated UserBehavior ubs = 1;
+}
+
+// 【离线数据】
+// 1. 离线数据以 hash 结构存储到 Tendis，subkey 由两部分组成
+//   1. meta 元数据，记录离线版本、最新 dt、桶基础信息等数据
+//   2. 桶数据，离线按照 dt 分桶，桶包含正排 + 倒排
+// 2. 线上提供 JNI 接口供离线调用生成离线数据
+// 3. unified did = 10132
+//
+// {
+//   "uid": {
+//     "meta": "LZ4Compress(OfflineMeta serialized bytes)",
+//     "bucket_0": "LZ4Compress(OfflineBucket serialized bytes)",
+//     "bucket_1": "LZ4Compress(OfflineBucket serialized bytes)"
+//     "bucket_n": "LZ4Compress(OfflineBucket serialized bytes)"
+//   }
+// }
+
+message OfflineMeta {
+  // 离线数据版本，用于离线 unified 落样本
+  uint64 version = 1;
+  // 离线数据最近 dt
+  uint64 latest_dt = 2;
+  // 策略一，按照 dt 范围选通
+  repeated OfflineBucketMeta bucket_metas = 3;
+  // 策略二，按照 field_type + target 联合索引选通
+  map<uint32, OfflineBucketIds> bucket_ids = 4;
+}
+
+message OfflineBucketMeta {
+  // 桶名，即 subkey 名字
+  uint64 id = 1;
+  // 策略一，按照 dt 范围选通
+  // 桶数据开始 dt
+  uint64 begin_dt = 2;
+  // 桶数据结束 dt
+  uint64 end_dt = 3;
+}
+
+message OfflineBucketIds {
+  repeated uint64 ids = 1;
+}
+
+message OfflineBucket {
+  uint32 version = 1;
+  // size of index internal UserBehavior
+  uint32 ub_size = 2;
+  // buffer of index internal UserBehavior
+  bytes ubs = 3;
+  message IiEntry {
+    // field type
+    uint32 ft = 1;
+    // field value
+    uint64 target = 2;
+    // posting buffer
+    bytes pb = 3;
+  }
+  // inverted indexes
+  repeated IiEntry iis = 4;
+}
+
+/************************************************************************/
+/* 与算法同学相关 */
+/************************************************************************/
+message QueryResult {
+  // 查询树签名
+  string signature = 1;
+  // 查询结果子序列
+  repeated UserBehavior behaviors = 2;
+}
+
+// 用于给到 Fepie 进行 HardSearch 操作
+// did = 10143
+// 10143 = 10131(online) + 10132(offline)
+message OptimusEntity {
+  repeated QueryResult results = 1;
+  // 5000 - 5100 仅仅是为了 did entity 规范，这里无视即可
+  // 日期版本 使用数据的日期
+  uint64 version = 5000;
+  uint32 did     = 5001;
+  // 占位
+  reserved 5002 to 5100;
+}
+
+/************************************************************************/
+/* 离线样本相关 */
+/************************************************************************/
+// 在线序列特征落盘
+// did = 10131
+// entity_key_type = uid
+message OptimusOnlineEntity {
+  // 从 redis 读到的所有在线序列数据
+  // key value 都是 kv 中的原始数据(不需解压)
+  map<string, bytes> ubs = 1;
+  // 5000 - 5100 仅仅是为了 did entity 规范，这里只需填充 did 即可
+  // 日期版本 使用数据的日期
+  uint64 version = 5000;
+  uint32 did     = 5001;
+  // 占位
+  reserved 5002 to 5100;
+}
+
+// 离线序列特征落盘
+// did = 10132
+// entity_key_type = mid
+message OptimusOfflineEntity {
+  // 日期版本 使用数据的日期
+  uint64 version = 5000;
+  uint32 did     = 5001;
+  // 占位
+  reserved 5002 to 5100;
+}
+
+
+

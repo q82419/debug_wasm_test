@@ -1,0 +1,13 @@
+workspace(name = "tendis_wasm_example")
+
+load("@tendis_wasm_example//bazel:repositories.bzl", "tendis_wasm_example_repositories")
+
+tendis_wasm_example_repositories()
+
+load("@tendis_wasm_example//bazel:dependencies.bzl", "tendis_wasm_example_dependencies")
+
+tendis_wasm_example_dependencies()
+
+load("@tendis_wasm_example//bazel:dependencies_extra.bzl", "tendis_wasm_example_dependencies_extra")
+
+tendis_wasm_example_dependencies_extra()

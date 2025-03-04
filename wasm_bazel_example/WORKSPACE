@@ -1,0 +1,5 @@
+workspace(name = "wasm_bazel_example")
+
+load("@wasm_bazel_example//bazel:repositories.bzl", "tendis_wasm_example_repositories")
+
+tendis_wasm_example_repositories()
