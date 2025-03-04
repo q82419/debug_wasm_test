@@ -1,0 +1,49 @@
+name: Test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install bazelisk
+        run: |
+          brew install bazelisk
+      - name: wasm vm build
+        run: |
+          cd wasm_bazel_example/
+          bazelisk build //example:run_wasm
+      - name: wasm build
+        run: |
+          cd tendis_wasm_example/
+          bazelisk build //example:optimus_test.wasm
+      - name: install wasmedge
+        run: |
+          curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | bash -s -- -v 0.14.1
+      - name: run aot
+        run: |
+          wasmedgec bazel-bin/example/optimus_test.wasm bazel-bin/example/optimus_test.wasm.aot
+      - name: test pure wasm
+        run: |
+          cd tendis_wasm_example/
+          ../wasm_bazel_example/bazel-bin/example/run_wasm bazel-bin/example/optimus_test.wasm test ../wasm_bazel_example/100181088_1.bin
+      - name: test aot wasm
+        run: |
+          cd tendis_wasm_example/
+          ../wasm_bazel_example/bazel-bin/example/run_wasm bazel-bin/example/optimus_test.wasm.aot test ../wasm_bazel_example/100181088_1.bin
