@@ -8,9 +8,11 @@ wasm test
 brew install bazelisk
 
 # wasm vm build
+cd wasm_bazel_example/
 bazelisk build //example:run_wasm
 
 # wasm build
+cd tendis_wasm_example/
 bazelisk build //example:optimus_test.wasm
 
 # wasm aot
