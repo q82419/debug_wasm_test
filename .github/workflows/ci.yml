@@ -38,6 +38,7 @@ jobs:
           curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | bash -s -- -v 0.14.1
       - name: run aot
         run: |
+          cd tendis_wasm_example/
           source ~/.wasmedge/env
           wasmedgec bazel-bin/example/optimus_test.wasm bazel-bin/example/optimus_test.wasm.aot
       - name: test pure wasm
