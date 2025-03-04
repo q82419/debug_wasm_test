@@ -1,7 +1,7 @@
 # wasm_test
 wasm test
 
-# build
+# macos 14.1 build
 
 ```sh
 # install bazelisk
@@ -86,4 +86,35 @@ failed to call function(:tendis_wasm_dispatche_phase) out of bounds memory acces
 tendis_wasm_dispatche_phase wasm_call failed. res: -1
 libc++abi: terminating
 Abort trap: 6
+```
+
+#ubuntu 22.04 build
+
+```sh
+# install bazelisk
+wget https://github.com/bazelbuild/bazelisk/releases/download/v1.17.0/bazelisk-linux-arm64
+chmod +x bazelisk-linux-arm64
+mv bazelisk-linux-arm64 /usr/local/bin/bazelisk
+sudo mv bazelisk-linux-arm64 /usr/local/bin/bazelisk
+bazelisk --version
+
+# Modify here
+
+wasm_bazel_example/bazel/repositories.bzl
+# linux
+   #maybe(
+   #     http_archive,
+   #     name = "com_wasmedge",
+   #     sha256 = "6006eed4bf0f4898c3a76e685b1d7eed29c0a5a2b79461ff469490b0b1463dc8",
+   #     strip_prefix = "WasmEdge-0.14.1-Linux",
+   #     url = "https://github.com/WasmEdge/WasmEdge/releases/download/0.14.1/WasmEdge-0.14.1-ubuntu20.04_aarch64.tar.gz",
+   #     build_file = "//bazel:wasmedge.BUILD",  # 指定自定义的 BUILD 文件
+   # )
+
+
+wasm_bazel_example/bazel/wasmedge.BUILD
+
+#srcs = glob(["lib/*.so"]),  # linux
+
+
 ```
